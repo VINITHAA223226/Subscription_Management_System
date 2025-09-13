@@ -35,6 +35,7 @@ export const getChurnPrediction = () => apiClient.get('/recommendations/churn-pr
 export const getUsageBasedRecommendations = (params) => apiClient.get('/recommendations/usage-based', { params });
 export const getSeasonalRecommendations = () => apiClient.get('/recommendations/seasonal');
 export const getPlanComparison = (data) => apiClient.post('/recommendations/compare', data);
+export const getGlobalRecommendation = () => apiClient.get('/recommendations/global').then(res => res.data.recommendation);
 
 // Discounts (public view)
 export const getPublicDiscounts = () => apiClient.get('/plans/discounts/public').then(res => res.data.discounts);

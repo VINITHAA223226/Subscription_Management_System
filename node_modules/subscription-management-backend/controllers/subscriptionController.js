@@ -1,13 +1,15 @@
 const Subscription = require('../models/Subscription');
 const Plan = require('../models/Plan');
 const User = require('../models/User');
+const Discount = require('../models/Discount');
+const DiscountUsage = require('../models/DiscountUsage');
 const AuditLog = require('../models/AuditLog');
 const notifier = require('../utils/notifier');
 
 // Create a new subscription
 exports.subscribe = async (req, res) => {
   try {
-    const { planId, autoRenew = true, billingAddress, paymentMethod } = req.body;
+    const { planId, autoRenew = true, billingAddress, paymentMethod, discountCode } = req.body;
     const userId = req.user.userId;
 
     // Validate plan exists and is active
@@ -54,7 +56,7 @@ exports.subscribe = async (req, res) => {
       });
     }
 
-    // Create subscription
+    // Create subscription (price may be adjusted below if discount applied)
     const subscription = new Subscription({
       userId,
       planId,
@@ -67,10 +69,84 @@ exports.subscribe = async (req, res) => {
       nextPaymentAmount: plan.price
     });
 
+    // Optional: apply discount code
+    if (discountCode) {
+      const code = String(discountCode).trim().toUpperCase();
+      const now = new Date();
+      const discount = await Discount.findOne({ code });
+      if (!discount || !discount.isActive || discount.startDate > now || discount.endDate < now) {
+        return res.status(400).json({ success: false, message: 'Invalid or expired discount code' });
+      }
+
+      // Check usage limit
+      if (discount.usageLimit !== null && discount.usedCount >= discount.usageLimit) {
+        return res.status(400).json({ success: false, message: 'Discount code usage limit reached' });
+      }
+
+      // Check applicability (plan or product type)
+      const planApplicable = (discount.applicablePlans && discount.applicablePlans.length > 0)
+        ? discount.applicablePlans.map(id => id.toString()).includes(plan._id.toString())
+        : true;
+      const typeApplicable = (discount.applicableProductTypes && discount.applicableProductTypes.length > 0)
+        ? discount.applicableProductTypes.includes(plan.productType)
+        : true;
+      if (!planApplicable || !typeApplicable) {
+        return res.status(400).json({ success: false, message: 'Discount not applicable to this plan' });
+      }
+
+      // Check minimum order amount
+      if (discount.minOrderAmount && plan.price < discount.minOrderAmount) {
+        return res.status(400).json({ success: false, message: `Minimum order amount for this discount is $${discount.minOrderAmount}` });
+      }
+
+      // Calculate discount amount
+      let discountAmount = 0;
+      if (discount.type === 'percentage') {
+        discountAmount = (plan.price * (discount.value / 100));
+        if (discount.maxDiscountAmount) {
+          discountAmount = Math.min(discountAmount, discount.maxDiscountAmount);
+        }
+      } else if (discount.type === 'fixed_amount') {
+        discountAmount = discount.value;
+      }
+      discountAmount = Math.max(0, Math.min(discountAmount, plan.price));
+      const amountAfter = Math.max(0, Math.round((plan.price - discountAmount) * 100) / 100);
+
+      subscription.nextPaymentAmount = amountAfter;
+      subscription.discountApplied = discount._id;
+
+      // Reserve usage: increment usedCount and record usage after subscription saved
+      // We'll create DiscountUsage after subscription.save() succeeds
+      // Increment usedCount optimistically
+      await Discount.updateOne({ _id: discount._id }, { $inc: { usedCount: 1 } });
+
+      // After save, create DiscountUsage record
+      subscription.__discountMeta = { code, discountId: discount._id, amountBefore: plan.price, discountAmount, amountAfter };
+    }
+
     await subscription.save();
 
     // Populate plan details
     await subscription.populate('planId');
+
+    // Create discount usage record if applied
+    if (subscription.__discountMeta) {
+      const { code, discountId, amountBefore, discountAmount, amountAfter } = subscription.__discountMeta;
+      try {
+        await DiscountUsage.create({
+          userId,
+          subscriptionId: subscription._id,
+          discountId,
+          code,
+          amountBefore,
+          discountAmount,
+          amountAfter
+        });
+      } catch (e) {
+        console.error('Error recording discount usage:', e);
+      }
+      delete subscription.__discountMeta;
+    }
 
     // Log the action
     await AuditLog.logAction({
@@ -391,10 +467,10 @@ exports.renew = async (req, res) => {
       });
     }
 
-    if (!['active', 'expired'].includes(subscription.status)) {
+    if (!['active', 'expired', 'cancelled'].includes(subscription.status)) {
       return res.status(400).json({
         success: false,
-        message: 'Only active or expired subscriptions can be renewed'
+        message: 'Only active, expired, or cancelled subscriptions can be renewed'
       });
     }
 

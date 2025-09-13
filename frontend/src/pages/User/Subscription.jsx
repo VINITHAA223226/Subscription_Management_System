@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import useFetch from '../../hooks/useFetch.js';
 import { NotificationContext } from '../../context/NotificationContext.jsx';
-import { getUserSubscriptions, upgradeDowngrade, cancelSubscription, renewSubscription, toggleAutoRenew } from '../../services/userService.js';
+import { getUserSubscriptions, upgradeDowngrade, cancelSubscription, renewSubscription, toggleAutoRenew, getPlans } from '../../services/userService.js';
 import styles from '../../styles/dashboard.module.css';
 
 const Subscription = () => {
@@ -11,11 +11,17 @@ const Subscription = () => {
   const [newPlanId, setNewPlanId] = useState('');
   const [loading, setLoading] = useState(false);
   const { data: subscriptions, loading: subscriptionsLoading, error, refetch } = useFetch(getUserSubscriptions);
+  const { data: plans } = useFetch(getPlans);
   const { showNotification } = useContext(NotificationContext);
 
   const handleUpgradeDowngrade = async () => {
     if (!selectedSubscription || !newPlanId) {
       showNotification('Please select a subscription and new plan', 'warning');
+      return;
+    }
+
+    if (selectedSubscription?.planId?._id === newPlanId) {
+      showNotification('You are already on this plan', 'info');
       return;
     }
 
@@ -245,10 +251,13 @@ const Subscription = () => {
                     onChange={(e) => setNewPlanId(e.target.value)}
                   >
                     <option value="">Choose a new plan...</option>
-                    {/* This would typically come from a separate API call to get all available plans */}
-                    <option value="plan1">Basic Plan - $29.99/month</option>
-                    <option value="plan2">Standard Plan - $49.99/month</option>
-                    <option value="plan3">Premium Plan - $79.99/month</option>
+                    {plans
+                      ?.filter(p => p._id !== selectedSubscription?.planId?._id)
+                      .map(p => (
+                        <option key={p._id} value={p._id}>
+                          {p.name} - ${p.price}/month
+                        </option>
+                      ))}
                   </select>
                 </div>
               )}
@@ -299,19 +308,27 @@ const Subscription = () => {
                 {subscriptions?.map(subscription => (
                   <tr key={subscription._id}>
                     <td>
-                      <div>
-                        <p className="font-medium">{subscription.planId.name}</p>
-                        <p className="text-sm text-gray-600">{subscription.planId.productType}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{subscription.planId.name}</span>
+                        <span className="planType">{subscription.planId.productType}</span>
                       </div>
                     </td>
                     <td>
                       <span className={`statusBadge ${subscription.status}`}>
-                        {subscription.status}
+                        {subscription.status.charAt(0).toUpperCase() + subscription.status.slice(1)}
                       </span>
                     </td>
-                    <td>{new Date(subscription.startDate).toLocaleDateString()}</td>
-                    <td>{new Date(subscription.endDate).toLocaleDateString()}</td>
-                    <td>${subscription.planId.price}</td>
+                    <td>
+                      {new Date(subscription.startDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </td>
+                    <td>
+                      {new Date(subscription.endDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </td>
+                    <td className="text-right">${
+                      typeof subscription.planId.price === 'number'
+                        ? subscription.planId.price.toFixed(2)
+                        : subscription.planId.price
+                    }</td>
                   </tr>
                 ))}
               </tbody>

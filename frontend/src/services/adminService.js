@@ -27,6 +27,7 @@ export const togglePlanStatus = (id) => apiClient.patch(`/plans/${id}/toggle-sta
 
 // Discount Management
 export const getDiscounts = (params) => apiClient.get('/admin/discounts', { params }).then(res => res.data.discounts);
+export const getDiscountUsage = (params) => apiClient.get('/admin/discounts/usage', { params }).then(res => res.data);
 export const createDiscount = (data) => apiClient.post('/admin/discounts', data);
 export const updateDiscount = (id, data) => apiClient.put(`/admin/discounts/${id}`, data);
 export const deleteDiscount = (id) => apiClient.delete(`/admin/discounts/${id}`);

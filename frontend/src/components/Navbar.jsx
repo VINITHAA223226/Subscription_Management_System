@@ -16,7 +16,7 @@ const Navbar = () => {
     <nav className="bg-blue-600 text-white p-4 flex justify-between items-center shadow-lg">
       <Link to="/" className="flex items-center hover:opacity-80 transition-opacity">
         <img src={logo} alt="Logo" className="h-8 mr-2" />
-        <span className="font-bold text-xl">Subscription System</span>
+        <span className="font-bold text-xl">Lumen Subscription Manager</span>
       </Link>
       
       <div className="flex items-center gap-4">

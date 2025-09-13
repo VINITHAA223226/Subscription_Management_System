@@ -1,6 +1,7 @@
 import React from 'react';
 import useFetch from '../../hooks/useFetch.js';
-import { getAdminDashboard, getAnalytics } from '../../services/adminService.js';
+import { getAdminDashboard, getAnalytics, getDiscountUsage } from '../../services/adminService.js';
+import { getTopPlansByYear, getTopPlansCurrent } from '../../services/analyticsService.js';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
 import chartConfig from '../../utils/chartConfig.js';
@@ -11,6 +12,9 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 const AdminDashboard = () => {
   const { data: dashboard, loading: dashboardLoading, error: dashboardError } = useFetch(getAdminDashboard);
   const { data: analytics, loading: analyticsLoading } = useFetch(getAnalytics);
+  const { data: discountUsage } = useFetch(() => getDiscountUsage({ limit: 10 }));
+  const { data: topPlansByYear } = useFetch(() => getTopPlansByYear({ limit: 5 }));
+  const { data: topPlansCurrent } = useFetch(() => getTopPlansCurrent({ limit: 5 }));
 
   if (dashboardLoading) return <div className="loading"><div className="spinner"></div>Loading dashboard...</div>;
   if (dashboardError) return <div className="alert alert-error">Error loading dashboard: {dashboardError}</div>;
@@ -69,10 +73,7 @@ const AdminDashboard = () => {
             <h3 className={styles.statValue}>${overview?.totalRevenue?.toFixed(2) || 0}</h3>
             <p className={styles.statLabel}>Monthly Revenue</p>
           </div>
-          <div className={`${styles.statCard} ${overview?.churnRate > 5 ? styles.danger : styles.success}`}>
-            <h3 className={styles.statValue}>{overview?.churnRate?.toFixed(1) || 0}%</h3>
-            <p className={styles.statLabel}>Churn Rate</p>
-          </div>
+  
           <div className={`${styles.statCard} ${styles.success}`}>
             <h3 className={styles.statValue}>{overview?.totalPlans || 0}</h3>
             <p className={styles.statLabel}>Available Plans</p>
@@ -164,6 +165,125 @@ const AdminDashboard = () => {
           )}
         </div>
 
+        {/* Top Plans by Year */}
+        <div className="card mb-6">
+          <h2 className="text-xl font-semibold mb-4">Top Plans by Year</h2>
+          {!topPlansByYear?.years?.length ? (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyStateIcon}>📅</div>
+              <h3 className={styles.emptyStateTitle}>No Yearly Data</h3>
+              <p className={styles.emptyStateDescription}>No yearly breakdown available.</p>
+            </div>
+          ) : (
+            topPlansByYear.years.map(year => (
+              <div key={year} className="mb-4">
+                <h3 className="font-semibold mb-2">{year}</h3>
+                <div className="tableContainer">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Plan</th>
+                        <th>Type</th>
+                        <th>Price</th>
+                        <th>Subscriptions</th>
+                        <th>Subscribers</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topPlansByYear.byYear[year].map(row => (
+                        <tr key={`${year}-${row.planId}`}>
+                          <td>{row.planName}</td>
+                          <td><span className="planType">{row.planType}</span></td>
+                          <td>${row.planPrice}</td>
+                          <td>{row.subscriptionCount}</td>
+                          <td>{row.uniqueSubscribers}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Popular Plans: Current Month and Year */}
+        <div className="card mb-6">
+          <h2 className="text-xl font-semibold mb-4">Popular Plans (Current Month & Year)</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <h3 className="font-semibold mb-2">This Month</h3>
+              {!topPlansCurrent?.month?.length ? (
+                <div className={styles.emptyState}>
+                  <div className={styles.emptyStateIcon}>📅</div>
+                  <h3 className={styles.emptyStateTitle}>No Data</h3>
+                  <p className={styles.emptyStateDescription}>No subscriptions this month.</p>
+                </div>
+              ) : (
+                <div className="tableContainer">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Plan</th>
+                        <th>Type</th>
+                        <th>Price</th>
+                        <th>Subscriptions</th>
+                        <th>Subscribers</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topPlansCurrent.month.map(row => (
+                        <tr key={`m-${row.planId}`}>
+                          <td>{row.planName}</td>
+                          <td><span className="planType">{row.planType}</span></td>
+                          <td>${row.planPrice}</td>
+                          <td>{row.subscriptionCount}</td>
+                          <td>{row.uniqueSubscribers}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div>
+              <h3 className="font-semibold mb-2">This Year</h3>
+              {!topPlansCurrent?.year?.length ? (
+                <div className={styles.emptyState}>
+                  <div className={styles.emptyStateIcon}>📆</div>
+                  <h3 className={styles.emptyStateTitle}>No Data</h3>
+                  <p className={styles.emptyStateDescription}>No subscriptions this year.</p>
+                </div>
+              ) : (
+                <div className="tableContainer">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Plan</th>
+                        <th>Type</th>
+                        <th>Price</th>
+                        <th>Subscriptions</th>
+                        <th>Subscribers</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topPlansCurrent.year.map(row => (
+                        <tr key={`y-${row.planId}`}>
+                          <td>{row.planName}</td>
+                          <td><span className="planType">{row.planType}</span></td>
+                          <td>${row.planPrice}</td>
+                          <td>{row.subscriptionCount}</td>
+                          <td>{row.uniqueSubscribers}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Recent Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Users */}
@@ -250,6 +370,50 @@ const AdminDashboard = () => {
               Send Notifications
             </button>
           </div>
+        </div>
+
+        {/* Discount Usage */}
+        <div className="card mt-6">
+          <h2 className="text-xl font-semibold mb-4">Recent Discount Usage</h2>
+          {discountUsage?.usage?.length ? (
+            <div className="tableContainer">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>User</th>
+                    <th>Amount Before</th>
+                    <th>Discount</th>
+                    <th>Final Amount</th>
+                    <th>Applied At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {discountUsage.usage.map(row => (
+                    <tr key={row._id}>
+                      <td><span className="font-mono text-sm">{row.code}</span></td>
+                      <td>
+                        <div>
+                          <p className="font-medium">{row.userId?.username || 'N/A'}</p>
+                          <p className="text-sm text-gray-600">{row.userId?.email}</p>
+                        </div>
+                      </td>
+                      <td>${row.amountBefore?.toFixed?.(2) || row.amountBefore}</td>
+                      <td>-${row.discountAmount?.toFixed?.(2) || row.discountAmount}</td>
+                      <td>${row.amountAfter?.toFixed?.(2) || row.amountAfter}</td>
+                      <td>{new Date(row.appliedAt).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyStateIcon}>🎫</div>
+              <h3 className={styles.emptyStateTitle}>No Discount Usage</h3>
+              <p className={styles.emptyStateDescription}>No discount codes have been applied yet.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

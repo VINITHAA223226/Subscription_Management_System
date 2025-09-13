@@ -146,6 +146,40 @@ exports.getSeasonalRecommendations = async (req, res) => {
   }
 };
 
+// Get globally recommended plan based on total active subscriptions (popularity)
+exports.getGlobalRecommendation = async (req, res) => {
+  try {
+    // Aggregate active subscriptions to find the most popular plan
+    const topPlanAgg = await Subscription.aggregate([
+      { $match: { status: 'active' } },
+      { $group: { _id: '$planId', subscriptions: { $sum: 1 } } },
+      { $sort: { subscriptions: -1 } },
+      { $limit: 1 },
+    ]);
+
+    if (!topPlanAgg.length) {
+      return res.json({ success: true, recommendation: null, reason: 'No subscriptions yet' });
+    }
+
+    const plan = await Plan.findById(topPlanAgg[0]._id);
+    if (!plan || !plan.isActive) {
+      return res.json({ success: true, recommendation: null, reason: 'Top plan not available' });
+    }
+
+    res.json({
+      success: true,
+      recommendation: {
+        plan,
+        rationale: 'Most popular among active subscribers',
+        subscribers: topPlanAgg[0].subscriptions,
+      },
+    });
+  } catch (error) {
+    console.error('Get global recommendation error:', error);
+    res.status(500).json({ success: false, message: 'Server error while getting global recommendation' });
+  }
+};
+
 // Get plan comparison recommendations
 exports.getPlanComparison = async (req, res) => {
   try {

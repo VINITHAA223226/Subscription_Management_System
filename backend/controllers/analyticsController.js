@@ -280,6 +280,137 @@ exports.getTopPlans = async (req, res) => {
   }
 };
 
+// Get top plans grouped by year
+exports.getTopPlansByYear = async (req, res) => {
+  try {
+    const { limit = 5, startYear, endYear } = req.query;
+
+    // Optional year filtering
+    const matchStage = {};
+    if (startYear || endYear) {
+      const start = startYear ? new Date(`${startYear}-01-01T00:00:00.000Z`) : new Date('1970-01-01T00:00:00.000Z');
+      const end = endYear ? new Date(`${endYear}-12-31T23:59:59.999Z`) : new Date();
+      matchStage.createdAt = { $gte: start, $lte: end };
+    }
+
+    const agg = await Subscription.aggregate([
+      Object.keys(matchStage).length ? { $match: matchStage } : { $match: {} },
+      {
+        $group: {
+          _id: { year: { $year: '$createdAt' }, planId: '$planId' },
+          subscriptionCount: { $sum: 1 },
+          uniqueUsers: { $addToSet: '$userId' }
+        }
+      },
+      { $sort: { '_id.year': 1, subscriptionCount: -1 } },
+      {
+        $lookup: {
+          from: 'plans',
+          localField: '_id.planId',
+          foreignField: '_id',
+          as: 'plan'
+        }
+      },
+      { $unwind: '$plan' },
+      {
+        $project: {
+          year: '$_id.year',
+          planId: '$_id.planId',
+          subscriptionCount: 1,
+          uniqueSubscribers: { $size: '$uniqueUsers' },
+          planName: '$plan.name',
+          planPrice: '$plan.price',
+          planType: '$plan.productType'
+        }
+      }
+    ]);
+
+    // Group in JS and cap to 'limit' per year
+    const byYear = {};
+    for (const row of agg) {
+      const y = row.year;
+      if (!byYear[y]) byYear[y] = [];
+      if (byYear[y].length < parseInt(limit)) {
+        byYear[y].push(row);
+      }
+    }
+
+    const years = Object.keys(byYear).sort((a, b) => Number(b) - Number(a));
+
+    res.json({
+      success: true,
+      years,
+      byYear
+    });
+  } catch (error) {
+    console.error('Get top plans by year error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// Get popular plans for current month and current year
+exports.getTopPlansCurrent = async (req, res) => {
+  try {
+    const { limit = 5 } = req.query;
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const yearEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+
+    // Helper to aggregate within a range
+    const aggregateRange = async (start, end) => {
+      const rows = await Subscription.aggregate([
+        { $match: { createdAt: { $gte: start, $lte: end } } },
+        {
+          $group: {
+            _id: '$planId',
+            subscriptionCount: { $sum: 1 },
+            uniqueUsers: { $addToSet: '$userId' }
+          }
+        },
+        { $sort: { subscriptionCount: -1 } },
+        { $limit: parseInt(limit) },
+        {
+          $lookup: {
+            from: 'plans',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'plan'
+          }
+        },
+        { $unwind: '$plan' },
+        {
+          $project: {
+            planId: '$_id',
+            subscriptionCount: 1,
+            uniqueSubscribers: { $size: '$uniqueUsers' },
+            planName: '$plan.name',
+            planPrice: '$plan.price',
+            planType: '$plan.productType'
+          }
+        }
+      ]);
+      return rows;
+    };
+
+    const [month, year] = await Promise.all([
+      aggregateRange(monthStart, monthEnd),
+      aggregateRange(yearStart, yearEnd)
+    ]);
+
+    res.json({ success: true, month, year });
+  } catch (error) {
+    console.error('Get top plans current error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 // Get churn analytics
 exports.getChurnAnalytics = async (req, res) => {
   try {

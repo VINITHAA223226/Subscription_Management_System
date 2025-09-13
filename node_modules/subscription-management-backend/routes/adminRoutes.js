@@ -8,6 +8,7 @@ const {
   getDiscounts,
   updateDiscount,
   deleteDiscount,
+  getDiscountUsageReport,
   sendNotification,
   sendNotificationToRole
 } = require('../controllers/adminController');
@@ -27,6 +28,7 @@ router.post('/discounts', authMiddleware, adminOnly, createDiscount);
 router.get('/discounts', authMiddleware, adminOnly, getDiscounts);
 router.put('/discounts/:id', authMiddleware, adminOnly, updateDiscount);
 router.delete('/discounts/:id', authMiddleware, adminOnly, deleteDiscount);
+router.get('/discounts/usage', authMiddleware, adminOnly, getDiscountUsageReport);
 
 // Notification management
 router.post('/notifications/send', authMiddleware, adminOnly, sendNotification);

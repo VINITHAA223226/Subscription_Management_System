@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Subscription = require('../models/Subscription');
 const Plan = require('../models/Plan');
 const Discount = require('../models/Discount');
+const DiscountUsage = require('../models/DiscountUsage');
 const AuditLog = require('../models/AuditLog');
 const notifier = require('../utils/notifier');
 const { validatePositiveNumber, validateDateRange } = require('../utils/validators');
@@ -415,6 +416,42 @@ exports.getDiscounts = async (req, res) => {
       success: false,
       message: 'Server error'
     });
+  }
+};
+
+// Get discount usage report (admin)
+exports.getDiscountUsageReport = async (req, res) => {
+  try {
+    const { code, userId, page = 1, limit = 20 } = req.query;
+    const filter = {};
+    if (code) filter.code = String(code).toUpperCase();
+    if (userId) filter.userId = userId;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const [rows, total] = await Promise.all([
+      DiscountUsage.find(filter)
+        .populate('userId', 'username email')
+        .populate('subscriptionId', 'status')
+        .populate('discountId', 'name code')
+        .sort({ appliedAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      DiscountUsage.countDocuments(filter)
+    ]);
+
+    res.json({
+      success: true,
+      usage: rows,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(total / parseInt(limit)),
+        total,
+        limit: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get discount usage report error:', error);
+    res.status(500).json({ success: false, message: 'Server error fetching discount usage' });
   }
 };
 
