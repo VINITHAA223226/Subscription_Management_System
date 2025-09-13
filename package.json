@@ -1,0 +1,14 @@
+{
+    "name": "subscription-management-system",
+    "version": "1.0.0",
+    "private": true,
+    "workspaces": [
+      "backend",
+      "frontend"
+    ],
+    "scripts": {
+      "start:backend": "npm --prefix backend start",
+      "dev:frontend": "npm --prefix frontend run dev"
+    }
+  }
+  
